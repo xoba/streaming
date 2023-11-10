@@ -37,11 +37,11 @@ func ws(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer conn.Close()
 
-	p1Path := fmt.Sprintf("fifo_%s.webm", uuid.NewString()[:8])
+	p1Path := fmt.Sprintf("tmp/fifo_%s.webm", uuid.NewString()[:8])
 	if err := syscall.Mkfifo(p1Path, 0644); err != nil {
 		return err
 	}
-	p2Path := fmt.Sprintf("fifo_%s.webm", uuid.NewString()[:8])
+	p2Path := fmt.Sprintf("tmp/fifo_%s.webm", uuid.NewString()[:8])
 	if err := syscall.Mkfifo(p2Path, 0644); err != nil {
 		return err
 	}
@@ -123,6 +123,9 @@ func main() {
 }
 
 func run() error {
+	if err := os.MkdirAll("tmp", os.ModePerm); err != nil {
+		return err
+	}
 	const port = 8080
 	http.HandleFunc("/", webHandler)
 	http.HandleFunc("/ws", wsHandler)
