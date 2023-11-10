@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -26,13 +28,11 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	// Create a file to save the audio
-	outFile, err := os.Create("output_audio.webm") // Change the file extension based on the audio format you expect to receive
+	fifo, err := os.OpenFile(fifoPath, os.O_WRONLY, os.ModeNamedPipe)
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Fatalf("error opening named pipe: %v", err)
 	}
-	defer outFile.Close()
+	defer fifo.Close()
 
 	// Read messages from the WebSocket connection
 	for {
@@ -47,7 +47,7 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 		case websocket.BinaryMessage:
 			// Write the binary data to the file
 			log.Printf("%d bytes received", len(p))
-			if _, writeErr := outFile.Write(p); writeErr != nil {
+			if _, writeErr := fifo.Write(p); writeErr != nil {
 				fmt.Println(err)
 				return
 			}
@@ -77,8 +77,21 @@ func main() {
 	}
 }
 
+const fifoPath = "mypipe.webm"
+
 func run() error {
 	const port = 8080
+
+	if err := os.Remove(fifoPath); err != nil {
+		return err
+	}
+	if err := syscall.Mkfifo(fifoPath, 0644); err != nil {
+		return err
+	}
+	if err := exec.Command("ffplay", fifoPath).Start(); err != nil {
+		return err
+	}
+
 	http.HandleFunc("/", webHandler)
 	http.HandleFunc("/echo", wsHandler)
 	log.Printf("Server starting on :%d", port)
