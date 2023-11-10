@@ -19,6 +19,7 @@ var upgrader = websocket.Upgrader{
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
+	SetCommonHeaders(w)
 	log.Printf("handling websocket")
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -53,11 +54,18 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 			}
 		case websocket.TextMessage:
 			log.Printf("text: %s\n", string(p))
+			switch msg := string(p); msg {
+			case "stop":
+				return
+			default:
+				log.Printf("unhandled message: %q", msg)
+			}
 		}
 	}
 }
 
 func webHandler(w http.ResponseWriter, r *http.Request) {
+	SetCommonHeaders(w)
 	log.Printf("uri: %q", r.RequestURI)
 	switch r.URL.Path {
 	case "/":
@@ -100,4 +108,18 @@ func run() error {
 		open.Run(fmt.Sprintf("http://localhost:%d", port))
 	}()
 	return http.ListenAndServe(":8080", nil)
+}
+
+func SetCommonHeaders(w http.ResponseWriter) {
+	h := w.Header()
+	h.Add("Access-Control-Allow-Origin", "*")
+	h.Add("Referrer-Policy", "no-referrer")
+	h.Add("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+	h.Add("X-Content-Type-Options", "nosniff")
+	h.Add("X-Frame-Options", "SAMEORIGIN")
+	h.Add("X-Permitted-Cross-Domain-Policies", "none")
+	h.Add("X-XSS-Protection", "1; mode=block")
+	h.Set("Cache-Control", "no-cache, no-store, must-revalidate")
+	h.Set("Pragma", "no-cache")
+	h.Set("Expires", "0")
 }
