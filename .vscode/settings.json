@@ -1,0 +1,5 @@
+{
+    "files.exclude": {
+        "fifo_*": true
+    }
+}
