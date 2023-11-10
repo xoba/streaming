@@ -8,7 +8,7 @@ to run, execute:
 go run .
 ```
 
-then just talk to the browser, and you'll hear it echo'd on your speakers. runs for 5 seconds.
+then just talk aloud to the browser, and you'll hear it echoed on your speakers. it runs for just 5 seconds.
 works on port 8080.
 
 you'll need `ffplay` installed, which comes as part of `ffmpeg`.
