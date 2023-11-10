@@ -20,9 +20,11 @@ var upgrader = websocket.Upgrader{
 }
 
 func wsHandler(w http.ResponseWriter, r *http.Request) {
+	defer log.Printf("websocket done")
 	log.Printf("handling websocket")
 	SetCommonHeaders(w)
 	if err := ws(w, r); err != nil {
+		log.Printf("oops: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 	}
 }
@@ -35,20 +37,39 @@ func ws(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer conn.Close()
 
-	fifoPath := fmt.Sprintf("fifo_%s.webm", uuid.NewString()[:8])
-
-	if err := syscall.Mkfifo(fifoPath, 0644); err != nil {
+	p1Path := fmt.Sprintf("fifo_%s.webm", uuid.NewString()[:8])
+	if err := syscall.Mkfifo(p1Path, 0644); err != nil {
 		return err
 	}
-	if err := exec.Command("ffplay", fifoPath).Start(); err != nil {
+	p2Path := fmt.Sprintf("fifo_%s.webm", uuid.NewString()[:8])
+	if err := syscall.Mkfifo(p2Path, 0644); err != nil {
 		return err
 	}
 
-	fifo, err := os.OpenFile(fifoPath, os.O_WRONLY, os.ModeNamedPipe)
+	run := func(cmd string, args ...string) error {
+		x := exec.Command(cmd, args...)
+		x.Stderr = os.Stderr
+		x.Stdout = os.Stdout
+		return x.Start()
+	}
+
+	// p1 -> ffmpeg -> p2
+	// this special effect slows down the audio
+	if err := run("ffmpeg", "-y", "-i", p1Path, "-filter:a", "atempo=0.75", p2Path); err != nil {
+		return err
+	}
+
+	// p2 -> ffplay
+	// play the sounds
+	if err := run("ffplay", p2Path); err != nil {
+		return err
+	}
+
+	p1, err := os.OpenFile(p1Path, os.O_WRONLY, os.ModeNamedPipe)
 	if err != nil {
 		return err
 	}
-	defer fifo.Close()
+	defer p1.Close()
 
 	conn.WriteMessage(websocket.TextMessage, []byte("launched ffplay etc"))
 
@@ -64,7 +85,7 @@ func ws(w http.ResponseWriter, r *http.Request) error {
 		switch messageType {
 		case websocket.BinaryMessage:
 			log.Printf("%d bytes received", len(p))
-			if _, writeErr := fifo.Write(p); writeErr != nil {
+			if _, writeErr := p1.Write(p); writeErr != nil {
 				return err
 			}
 		case websocket.TextMessage:

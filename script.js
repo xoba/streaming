@@ -35,11 +35,9 @@ $(function () {
                         socket.send("stop");
                     };
 
-                    // Start recording
                     mediaRecorder.start(100);
 
-                    // Example: Stop recording after 5 seconds
-                    setTimeout(() => mediaRecorder.stop(), 5000);
+                    setTimeout(() => mediaRecorder.stop(), 10000);
                 })
                 .catch(error => {
                     error('Error accessing the microphone', error);
@@ -55,7 +53,17 @@ $(function () {
         error('WebSocket error:', error);
     };
     socket.onclose = function (event) {
-        log('WebSocket connection closed:', event);
+        let reason;
+        if (event.wasClean) {
+            reason = 'Closed cleanly';
+        } else {
+            reason = 'Connection died';
+        }
+        let message = 'WebSocket connection closed: ' + reason +
+            ', Code: ' + event.code;
+        if (event.reason) {
+            message += ', Reason: ' + event.reason;
+        }
+        log(message);
     };
-
 })
