@@ -1,44 +1,51 @@
 $(function () {
 
-    const socket = new WebSocket('ws://localhost:8080/echo');
+    var n = 0
+    var log = function (msg) {
+        const now = new Date();
+        const iso8601WithMilliseconds = now.toISOString();
+        n++;
+        $('#log').prepend('<p>' + n + ". " + iso8601WithMilliseconds + ": " + msg + '</p>');
+    };
+
+    const socket = new WebSocket('ws://' + window.location.host + '/echo');
 
     socket.onopen = function () {
-        console.log('WebSocket connection established');
+        log('WebSocket connection established');
     };
 
     socket.onmessage = function (message) {
-        console.log('Message received from server', message.data);
+        log('Message received from server', message.data);
     };
 
     socket.onerror = function (error) {
-        console.error('WebSocket error', error);
+        error('WebSocket error', error);
     };
 
     socket.onclose = function (event) {
-        console.log('WebSocket connection closed', event);
+        log('WebSocket connection closed', event);
     };
 
     // Check for mediaDevices API support
     if (navigator.mediaDevices) {
         navigator.mediaDevices.getUserMedia({ audio: true })
             .then(stream => {
-                // Initialize MediaRecorder with desired format
                 const mediaRecorder = new MediaRecorder(stream);
 
                 mediaRecorder.onstart = function (e) {
-                    console.log("onstart")
+                    log("onstart")
                     this.chunks = [];
                 };
 
                 mediaRecorder.ondataavailable = function (e) {
-                    console.log("got chunk");
+                    log("got chunk of " + e.data.size + " bytes");
                     this.chunks.push(e.data);
-                    // Send the audio chunk to the server using WebSocket
                     socket.send(e.data);
                 };
 
                 mediaRecorder.onstop = function (e) {
-                    console.log("onstop")
+                    log("onstop")
+                    socket.send("stop");
                 };
 
                 // Start recording
@@ -48,10 +55,10 @@ $(function () {
                 setTimeout(() => mediaRecorder.stop(), 5000);
             })
             .catch(error => {
-                console.error('Error accessing the microphone', error);
+                error('Error accessing the microphone', error);
             });
     } else {
-        console.error('navigator.mediaDevices not supported');
+        error('navigator.mediaDevices not supported');
     }
 
 
