@@ -18,7 +18,7 @@ var upgrader = websocket.Upgrader{
 	WriteBufferSize: 1024,
 }
 
-func wsHandler(w http.ResponseWriter, r *http.Request) {
+func websocketHandler(w http.ResponseWriter, r *http.Request) {
 	defer log.Printf("websocket done")
 	log.Printf("handling websocket")
 	SetCommonHeaders(w)
@@ -135,7 +135,7 @@ func run() error {
 	}
 	const port = 8080
 	http.HandleFunc("/", webHandler)
-	http.HandleFunc("/ws", wsHandler)
+	http.HandleFunc("/ws", websocketHandler)
 	log.Printf("Server starting on :%d", port)
 	go func() {
 		time.Sleep(time.Second / 3)
