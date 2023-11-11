@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"os/exec"
-	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/xoba/open-golang/open"
 )
@@ -29,6 +28,31 @@ func wsHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// pipes in -> c[0] -> c[1] -> ... -> c[n-1] -> out
+func pipe(in io.Reader, out io.Writer, c ...*exec.Cmd) error {
+	if len(c) == 0 {
+		return nil
+	}
+	run := func(cmd *exec.Cmd, in io.Reader, out io.Writer) error {
+		cmd.Stdin = in
+		cmd.Stdout = out
+		cmd.Stderr = os.Stderr
+		return cmd.Start()
+	}
+	switch len(c) {
+	case 0:
+		return nil
+	case 1:
+		return run(c[0], in, out)
+	default:
+		r, w := io.Pipe()
+		if err := run(c[0], in, w); err != nil {
+			return err
+		}
+		return pipe(r, out, c[1:]...)
+	}
+}
+
 func ws(w http.ResponseWriter, r *http.Request) error {
 	upgrader.CheckOrigin = func(r *http.Request) bool { return true }
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -37,39 +61,14 @@ func ws(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer conn.Close()
 
-	p1Path := fmt.Sprintf("tmp/fifo_%s.webm", uuid.NewString()[:8])
-	if err := syscall.Mkfifo(p1Path, 0644); err != nil {
-		return err
-	}
-	p2Path := fmt.Sprintf("tmp/fifo_%s.webm", uuid.NewString()[:8])
-	if err := syscall.Mkfifo(p2Path, 0644); err != nil {
-		return err
-	}
+	c1 := exec.Command("ffmpeg", "-y", "-i", "-", "-filter:a", "atempo=0.75", "-f", "webm", "pipe:1")
+	c2 := exec.Command("ffplay", "-")
 
-	run := func(cmd string, args ...string) error {
-		x := exec.Command(cmd, args...)
-		x.Stderr = os.Stderr
-		x.Stdout = os.Stdout
-		return x.Start()
-	}
+	in, out := io.Pipe()
 
-	// p1 -> ffmpeg -> p2
-	// this special effect slows down the audio
-	if err := run("ffmpeg", "-y", "-i", p1Path, "-filter:a", "atempo=0.75", p2Path); err != nil {
+	if err := pipe(in, io.Discard, c1, c2); err != nil {
 		return err
 	}
-
-	// p2 -> ffplay
-	// play the sounds
-	if err := run("ffplay", p2Path); err != nil {
-		return err
-	}
-
-	p1, err := os.OpenFile(p1Path, os.O_WRONLY, os.ModeNamedPipe)
-	if err != nil {
-		return err
-	}
-	defer p1.Close()
 
 	conn.WriteMessage(websocket.TextMessage, []byte("launched ffplay etc"))
 
@@ -85,7 +84,7 @@ func ws(w http.ResponseWriter, r *http.Request) error {
 		switch messageType {
 		case websocket.BinaryMessage:
 			log.Printf("%d bytes received", len(p))
-			if _, writeErr := p1.Write(p); writeErr != nil {
+			if _, writeErr := out.Write(p); writeErr != nil {
 				return err
 			}
 		case websocket.TextMessage:
