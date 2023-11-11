@@ -61,14 +61,22 @@ func ws(w http.ResponseWriter, r *http.Request) error {
 	}
 	defer conn.Close()
 
-	c1 := exec.Command("ffmpeg", "-y", "-i", "-", "-filter:a", "atempo=0.75", "-f", "webm", "pipe:1")
-	c2 := exec.Command("ffplay", "-")
+	var cmds = []*exec.Cmd{
+		exec.Command("ffmpeg", "-y", "-i", "-", "-filter:a", "atempo=0.75", "-f", "webm", "pipe:1"),
+		exec.Command("ffplay", "-"),
+	}
 
 	in, out := io.Pipe()
 
-	if err := pipe(in, io.Discard, c1, c2); err != nil {
+	if err := pipe(in, io.Discard, cmds...); err != nil {
 		return err
 	}
+
+	defer func() {
+		for _, c := range cmds {
+			c.Process.Kill()
+		}
+	}()
 
 	conn.WriteMessage(websocket.TextMessage, []byte("launched ffplay etc"))
 
